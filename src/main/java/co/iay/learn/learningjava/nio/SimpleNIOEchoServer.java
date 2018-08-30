@@ -12,7 +12,7 @@ public class SimpleNIOEchoServer {
     public static void main(String[] args) {
         ServerSocketChannel serverSocketChannel;
         Selector selector;
-        ByteBuffer buffer = ByteBuffer.allocate(SimpleNIO.BUFFER_SIZE);
+        long clientId = 1L;
 
         try {
             selector = Selector.open();
@@ -43,51 +43,76 @@ public class SimpleNIOEchoServer {
             while (it.hasNext()) {
                 SelectionKey key = it.next();
 
-                if (key.isAcceptable()) {
+                if (key.isValid() && key.isAcceptable()) {
                     SocketChannel sc;
                     try {
                         sc = serverSocketChannel.accept();
+                        sc.configureBlocking(false);
+                        sc.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE,
+                                new SimpleNIOClientAttachment(clientId, sc, ByteBuffer.allocate(SimpleNIO.BUFFER_SIZE), System.currentTimeMillis(), SimpleNIO.MODE_READ));
+                        ++clientId;
+
+                        if (clientId > SimpleNIO.DEFAULT_MAX_CLIENT_ID) {
+                            clientId = 1L;
+                        }
                     } catch (Exception e) {
                         e.printStackTrace();
                         continue;
                     }
+                }
 
-                    if (sc == null) {
-                        continue;
-                    }
-
-                    int readNum = 0;
-
-                    try {
-                        readNum = sc.read(buffer);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                        continue;
-                    }
-
-                    while (readNum > 0) {
-                        buffer.flip();
-                        int writeNum = 0;
+                if (key.isValid() && key.isReadable()) {
+                    SimpleNIOClientAttachment attachment = (SimpleNIOClientAttachment) key.attachment();
+                    System.out.println("Client #" + attachment.getId() + " isReadable");
+                    if (attachment.getMode() == SimpleNIO.MODE_READ && attachment.getBuffer().hasRemaining()) {
                         try {
-                            while (writeNum < readNum) {
-                                writeNum += sc.write(buffer);
+                            int readNum = attachment.getSocketChannel().read(attachment.getBuffer());
+
+                            if (readNum < 0) {
+                                System.out.println("Client #" + attachment.getId() + " disconnected");
+                                attachment.getSocketChannel().close();
+                            } else {
+                                System.out.println("Client #" + attachment.getId() + " read " + readNum + " bytes");
                             }
                         } catch (Exception e) {
+                            System.out.println("Client #" + attachment.getId() + " read exception:" + e.getMessage());
                             e.printStackTrace();
+                            it.remove();
                             continue;
                         }
-                        buffer.clear();
+                    }
+                }
 
-                        try {
-                            readNum = sc.read(buffer);
+                if (key.isValid() && key.isWritable()) {
+                    SimpleNIOClientAttachment attachment = (SimpleNIOClientAttachment) key.attachment();
+                    System.out.println("Client #" + attachment.getId() + " isWritable");
 
-                            if (readNum == -1) {
-                                buffer.clear();
-                                sc.close();
-                            }
-                        } catch (Exception e) {
-                            e.printStackTrace();
+                    try {
+                        if (attachment.getMode() == SimpleNIO.MODE_READ) {
+                            attachment.getBuffer().flip();
+                            attachment.setMode(SimpleNIO.MODE_WRITE);
                         }
+
+                        if (attachment.getBuffer().hasRemaining()) {
+                            int writeNum = attachment.getSocketChannel().write(attachment.getBuffer());
+
+                            if (writeNum < 0) {
+                                System.out.println("Client #" + attachment.getId() + " failed to write");
+                                attachment.getSocketChannel().close();
+                            } else {
+                                System.out.println("Client #" + attachment.getId() + " wrote " + writeNum + " bytes");
+                            }
+                        }
+
+                        if (!attachment.getBuffer().hasRemaining()) {
+                            attachment.getBuffer().clear();
+                            attachment.setMode(SimpleNIO.MODE_READ);
+                        }
+                    } catch (Exception e) {
+                        System.out.println("Client #" + attachment.getId() + " write exception:" + e.getMessage());
+                        e.printStackTrace();
+                        it.remove();
+                        continue;
                     }
                 }
 
