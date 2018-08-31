@@ -8,6 +8,8 @@ import (
     "fmt"
     "bufio"
     "runtime"
+    "bytes"
+    "strings"
 )
 
 func getRandomString(strLen int) []byte {
@@ -44,8 +46,9 @@ func handle(host string, port string, requestNum int, strLen *int, handled *int,
     }
 
     resp := bufio.NewReader(conn)
+    data2send := getRandomString(*strLen)
 
-    wrote, err := conn.Write(getRandomString(*strLen))
+    wrote, err := conn.Write(data2send)
 
     if err != nil {
         fmt.Println("conn.Write(): " + err.Error() + " and wrote " + string(wrote))
@@ -57,7 +60,7 @@ func handle(host string, port string, requestNum int, strLen *int, handled *int,
     }
 
     nowReadLen := 0
-
+    var data2receive []byte;
     for ; nowReadLen < *strLen; {
         nowRead, err := resp.ReadByte()
 
@@ -71,11 +74,18 @@ func handle(host string, port string, requestNum int, strLen *int, handled *int,
         }
 
         nowReadLen += len(string(nowRead))
+        data2receive = append(data2receive, nowRead)
 
         if nowReadLen >= *strLen {
             *handled++
-            *handleSuccess++
             conn.Close()
+            if bytes.Compare(data2send, data2receive) != 0 {
+                fmt.Println("Read/Write data mismatch")
+                *handleFail++
+                go handle(host, port, requestNum, strLen, handled, handleSuccess, handleFail)
+                return
+            }
+            *handleSuccess++
             go handle(host, port, requestNum, strLen, handled, handleSuccess, handleFail)
             return
         }
@@ -85,19 +95,29 @@ func handle(host string, port string, requestNum int, strLen *int, handled *int,
 func main() {
     host := flag.String("h", "127.0.0.1", "Host")
     port := flag.String("p", "12345", "Port")
+    portsStr := flag.String("P", "", "Ports separated by comma")
     strLen := flag.Int("l", 32, "Random string length")
     concurrent := flag.Int("c", 10, "Concurrent")
     requestNum := flag.Int("n", 10, "Request number")
     flag.Parse()
+    ports := strings.Split(*portsStr, ",")
 
-    fmt.Printf("host=%s port=%s strLen=%d concurrent=%d requestNum=%d\n", *host, *port, *strLen, *concurrent, *requestNum)
+    fmt.Printf("host=%s port=%s strLen=%d concurrent=%d requestNum=%d portsStr=%s\n", *host, *port, *strLen, *concurrent, *requestNum, *portsStr)
 
     handled := 0
     handleSuccess := 0
     handleFail := 0
+    portsIndex := 0
 
     for i := 0; i < *concurrent; i++ {
-        go handle(*host, *port, *requestNum, strLen, &handled, &handleSuccess, &handleFail)
+        tempPort := *port
+
+        if len(ports) > 0 {
+            tempPort = ports[portsIndex]
+            portsIndex = (portsIndex + 1) % len(ports)
+        }
+
+        go handle(*host, tempPort, *requestNum, strLen, &handled, &handleSuccess, &handleFail)
     }
 
     for ; handled < *requestNum; {
