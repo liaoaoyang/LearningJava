@@ -112,7 +112,7 @@ func main() {
     for i := 0; i < *concurrent; i++ {
         tempPort := *port
 
-        if len(ports) > 0 {
+        if len(*portsStr) > 0 {
             tempPort = ports[portsIndex]
             portsIndex = (portsIndex + 1) % len(ports)
         }
