@@ -24,11 +24,7 @@ func getRandomString(strLen int) []byte {
     return result
 }
 
-func handle(host string, port string, requestNum int, strLen *int, handled *int, handleSuccess *int, handleFail *int) {
-    if requestNum <= *handled {
-        return
-    }
-
+func handle(requestId int, host string, port string, requestNum int, strLen *int, handled *int, handleSuccess *int, handleFail *int) {
     tenPercentNum := requestNum / 10
 
     if (*handled) > 0 && (*handled)%tenPercentNum == 0 {
@@ -38,10 +34,9 @@ func handle(host string, port string, requestNum int, strLen *int, handled *int,
     conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))
 
     if err != nil {
-        fmt.Println("net.Dial(): " + err.Error())
+        fmt.Printf("Request #%d net.Dial(): %s\n", requestId, err.Error())
         *handled++
         *handleFail++
-        go handle(host, port, requestNum, strLen, handled, handleSuccess, handleFail)
         return
     }
 
@@ -51,11 +46,10 @@ func handle(host string, port string, requestNum int, strLen *int, handled *int,
     wrote, err := conn.Write(data2send)
 
     if err != nil {
-        fmt.Println("conn.Write(): " + err.Error() + " and wrote " + string(wrote))
+        fmt.Printf("Request #%d conn.Write(): %s and wrote %s\n", requestId, err.Error(), string(wrote))
         *handled++
         *handleFail++
         conn.Close()
-        go handle(host, port, requestNum, strLen, handled, handleSuccess, handleFail)
         return
     }
 
@@ -65,11 +59,10 @@ func handle(host string, port string, requestNum int, strLen *int, handled *int,
         nowRead, err := resp.ReadByte()
 
         if err != nil {
-            fmt.Println("resp.ReadByte(): " + err.Error())
+            fmt.Printf("Request #%d resp.ReadByte(): %s\n", requestId, err.Error())
             *handled++
             *handleFail++
             conn.Close()
-            go handle(host, port, requestNum, strLen, handled, handleSuccess, handleFail)
             return
         }
 
@@ -80,16 +73,19 @@ func handle(host string, port string, requestNum int, strLen *int, handled *int,
             *handled++
             conn.Close()
             if bytes.Compare(data2send, data2receive) != 0 {
-                fmt.Println("Read/Write data mismatch")
+                fmt.Printf("Request #%d Read/Write data mismatch\n", requestId)
                 *handleFail++
-                go handle(host, port, requestNum, strLen, handled, handleSuccess, handleFail)
                 return
             }
             *handleSuccess++
-            go handle(host, port, requestNum, strLen, handled, handleSuccess, handleFail)
             return
         }
     }
+}
+
+func doRequest(concurrentChan chan int, host string, port string, requestNum int, strLen *int, handled *int, handleSuccess *int, handleFail *int) {
+    requestId := <-concurrentChan
+    handle(requestId, host, port, requestNum, strLen, handled, handleSuccess, handleFail)
 }
 
 func main() {
@@ -109,7 +105,14 @@ func main() {
     handleFail := 0
     portsIndex := 0
 
-    for i := 0; i < *concurrent; i++ {
+    if *requestNum < *concurrent {
+        fmt.Printf("requestNum=%d < concurrent=%d, now set requestNum=%d\n", *requestNum, *concurrent, *concurrent)
+        *requestNum = *concurrent
+    }
+
+    concurrentChan := make(chan int, *concurrent)
+
+    for i := 1; i <= *requestNum; i++ {
         tempPort := *port
 
         if len(*portsStr) > 0 {
@@ -117,11 +120,17 @@ func main() {
             portsIndex = (portsIndex + 1) % len(ports)
         }
 
-        go handle(*host, tempPort, *requestNum, strLen, &handled, &handleSuccess, &handleFail)
+        concurrentChan <- i
+        go doRequest(concurrentChan, *host, tempPort, *requestNum, strLen, &handled, &handleSuccess, &handleFail)
     }
 
-    for ; handled < *requestNum; {
-        time.Sleep(1)
+    for ; handled <= *requestNum; {
+        if handled == *requestNum {
+            time.Sleep(1000 * 1000)
+            break
+        }
+
+        time.Sleep(1000)
     }
 
     fmt.Printf("Success:%d Fail:%d\n", handleSuccess, handleFail)
