@@ -24,19 +24,12 @@ func getRandomString(strLen int) []byte {
     return result
 }
 
-func handle(requestId int, host string, port string, requestNum int, strLen *int, handled *int, handleSuccess *int, handleFail *int) {
-    tenPercentNum := requestNum / 10
-
-    if (*handled) > 0 && (*handled)%tenPercentNum == 0 {
-        fmt.Printf("Requested finished %d with %d go routine\n", *handled, runtime.NumGoroutine())
-    }
-
+func handle(concurrentChan chan int, resultChan chan int, requestId int, host string, port string, strLen *int) {
     conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))
-
     if err != nil {
+        _ = <-concurrentChan
+        resultChan <- -1
         fmt.Printf("Request #%d net.Dial(): %s\n", requestId, err.Error())
-        *handled++
-        *handleFail++
         return
     }
 
@@ -47,8 +40,8 @@ func handle(requestId int, host string, port string, requestNum int, strLen *int
 
     if err != nil {
         fmt.Printf("Request #%d conn.Write(): %s and wrote %s\n", requestId, err.Error(), string(wrote))
-        *handled++
-        *handleFail++
+        _ = <-concurrentChan
+        resultChan <- -2
         conn.Close()
         return
     }
@@ -60,8 +53,8 @@ func handle(requestId int, host string, port string, requestNum int, strLen *int
 
         if err != nil {
             fmt.Printf("Request #%d resp.ReadByte(): %s\n", requestId, err.Error())
-            *handled++
-            *handleFail++
+            _ = <-concurrentChan
+            resultChan <- -3
             conn.Close()
             return
         }
@@ -70,22 +63,22 @@ func handle(requestId int, host string, port string, requestNum int, strLen *int
         data2receive = append(data2receive, nowRead)
 
         if nowReadLen >= *strLen {
-            *handled++
             conn.Close()
             if bytes.Compare(data2send, data2receive) != 0 {
                 fmt.Printf("Request #%d Read/Write data mismatch\n", requestId)
-                *handleFail++
+                _ = <-concurrentChan
+                resultChan <- -4
                 return
             }
-            *handleSuccess++
+            _ = <-concurrentChan
+            resultChan <- 0
             return
         }
     }
 }
 
-func doRequest(concurrentChan chan int, host string, port string, requestNum int, strLen *int, handled *int, handleSuccess *int, handleFail *int) {
-    requestId := <-concurrentChan
-    handle(requestId, host, port, requestNum, strLen, handled, handleSuccess, handleFail)
+func doRequest(concurrentChan chan int, resultChan chan int, requestId int, host string, port string, strLen *int) {
+    go handle(concurrentChan, resultChan, requestId, host, port, strLen)
 }
 
 func main() {
@@ -111,6 +104,7 @@ func main() {
     }
 
     concurrentChan := make(chan int, *concurrent)
+    resultChan := make(chan int, *requestNum)
 
     for i := 1; i <= *requestNum; i++ {
         tempPort := *port
@@ -121,16 +115,24 @@ func main() {
         }
 
         concurrentChan <- i
-        go doRequest(concurrentChan, *host, tempPort, *requestNum, strLen, &handled, &handleSuccess, &handleFail)
+        go doRequest(concurrentChan, resultChan, i, *host, tempPort, strLen)
     }
 
-    for ; handled <= *requestNum; {
-        if handled == *requestNum {
-            time.Sleep(1000 * 1000)
-            break
+    for ; handled < *requestNum; {
+        h := <-resultChan
+        handled++
+
+        if h < 0 {
+            handleFail++
+        } else {
+            handleSuccess++
         }
 
-        time.Sleep(1000)
+        tenPercentNum := *requestNum / 10
+
+        if (handled) > 0 && (handled)%tenPercentNum == 0 {
+            fmt.Printf("Requested finished %d(success=%d fail=%d) with %d go routine\n", handled, handleSuccess, handleFail, runtime.NumGoroutine())
+        }
     }
 
     fmt.Printf("Success:%d Fail:%d\n", handleSuccess, handleFail)
