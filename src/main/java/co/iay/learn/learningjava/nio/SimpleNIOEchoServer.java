@@ -10,6 +10,9 @@ import java.util.Iterator;
 
 public class SimpleNIOEchoServer {
     public static void main(String[] args) {
+        String hostname = System.getProperty("hostname", "127.0.0.1");
+        String port = System.getProperty("port", "12345");
+        String backlog = System.getProperty("backlog", "10000");
         ServerSocketChannel serverSocketChannel;
         Selector selector;
         long clientId = 1L;
@@ -18,7 +21,7 @@ public class SimpleNIOEchoServer {
             selector = Selector.open();
             serverSocketChannel = ServerSocketChannel.open();
             serverSocketChannel.configureBlocking(false);
-            serverSocketChannel.socket().bind(new InetSocketAddress("127.0.0.1", 12345), 10000);
+            serverSocketChannel.socket().bind(new InetSocketAddress(hostname, Integer.parseInt(port)), Integer.parseInt(backlog));
             serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
         } catch (Exception e) {
             e.printStackTrace();
@@ -69,12 +72,15 @@ public class SimpleNIOEchoServer {
                             int readNum = attachment.getSocketChannel().read(attachment.getBuffer());
 
                             if (readNum < 0) {
+                                key.cancel();
                                 System.out.println("Client #" + attachment.getId() + " disconnected");
                                 attachment.getSocketChannel().close();
+                                continue;
                             } else {
                                 System.out.println("Client #" + attachment.getId() + " read " + readNum + " bytes");
                             }
                         } catch (Exception e) {
+                            key.cancel();
                             System.out.println("Client #" + attachment.getId() + " read exception:" + e.getMessage());
                             e.printStackTrace();
                             it.remove();
@@ -97,8 +103,10 @@ public class SimpleNIOEchoServer {
                             int writeNum = attachment.getSocketChannel().write(attachment.getBuffer());
 
                             if (writeNum < 0) {
+                                key.cancel();
                                 System.out.println("Client #" + attachment.getId() + " failed to write");
                                 attachment.getSocketChannel().close();
+                                continue;
                             } else {
                                 System.out.println("Client #" + attachment.getId() + " wrote " + writeNum + " bytes");
                             }
@@ -109,8 +117,8 @@ public class SimpleNIOEchoServer {
                             attachment.setMode(SimpleNIO.MODE_READ);
                         }
                     } catch (Exception e) {
+                        key.cancel();
                         System.out.println("Client #" + attachment.getId() + " write exception:" + e.getMessage());
-                        e.printStackTrace();
                         it.remove();
                         continue;
                     }
