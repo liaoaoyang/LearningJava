@@ -10,6 +10,9 @@ import (
     "runtime"
     "bytes"
     "strings"
+    "os"
+    "syscall"
+    "os/signal"
 )
 
 func getRandomString(strLen int) []byte {
@@ -82,6 +85,9 @@ func doRequest(concurrentChan chan int, resultChan chan int, requestId int, host
 }
 
 func main() {
+    var needExit bool
+
+    needExit = false
     host := flag.String("h", "127.0.0.1", "Host")
     port := flag.String("p", "12345", "Port")
     portsStr := flag.String("P", "", "Ports separated by comma")
@@ -105,20 +111,44 @@ func main() {
 
     concurrentChan := make(chan int, *concurrent)
     resultChan := make(chan int, *requestNum)
+    alreadySent := 0
 
-    for i := 1; i <= *requestNum; i++ {
-        tempPort := *port
+    sigs := make(chan os.Signal, 1)
+    signal.Notify(sigs, syscall.SIGINT)
 
-        if len(*portsStr) > 0 {
-            tempPort = ports[portsIndex]
-            portsIndex = (portsIndex + 1) % len(ports)
+    go func() {
+        sig := <-sigs
+
+        if sig == syscall.SIGINT {
+            fmt.Printf("\nSent %d requests and now need exit after finished request\n", alreadySent)
+            needExit = true
         }
+    }()
 
-        concurrentChan <- i
-        go doRequest(concurrentChan, resultChan, i, *host, tempPort, strLen)
-    }
+    go func() {
+        for i := 1; i <= *requestNum; i++ {
+            if needExit {
+                break
+            }
+
+            tempPort := *port
+
+            if len(*portsStr) > 0 {
+                tempPort = ports[portsIndex]
+                portsIndex = (portsIndex + 1) % len(ports)
+            }
+
+            concurrentChan <- i
+            go doRequest(concurrentChan, resultChan, i, *host, tempPort, strLen)
+            alreadySent++
+        }
+    }()
 
     for ; handled < *requestNum; {
+        if needExit && handled >= alreadySent {
+            break
+        }
+
         h := <-resultChan
         handled++
 
