@@ -8,6 +8,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
+import java.util.ArrayDeque;
 import java.util.Iterator;
 
 public class SimpleNIOEchoServerIOHandler implements Runnable {
@@ -22,12 +23,14 @@ public class SimpleNIOEchoServerIOHandler implements Runnable {
     final private       String TAG                   = this.getClass().getName();
     final public static int    MAX_ONE_TIME_REGISTER = 100;
 
-    private Selector selector;
-    private boolean  initialized = false;
+    private Selector                      selector;
+    private boolean                       initialized = false;
+    private ArrayDeque<SocketChannelInfo> socketChannelInfos;
 
     public SimpleNIOEchoServerIOHandler() {
         try {
             selector = Selector.open();
+            socketChannelInfos = new ArrayDeque<>(1000);
             initialized = true;
         } catch (Exception e) {
             initialized = false;
@@ -35,9 +38,14 @@ public class SimpleNIOEchoServerIOHandler implements Runnable {
         }
     }
 
-    public synchronized SelectionKey addConnection(SocketChannelInfo info) throws Exception {
-        return info.getSocketChannel().register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE,
-                new SimpleNIOClientAttachment(info.getClientId(), info.getSocketChannel(), ByteBuffer.allocate(SimpleNIO.BUFFER_SIZE), System.currentTimeMillis(), SimpleNIO.MODE_READ));
+    public synchronized boolean addConnection(SocketChannelInfo info) throws Exception {
+        if (!initialized) {
+            throw new Exception("Not initialized");
+        }
+
+        info.getSocketChannel().configureBlocking(false);
+
+        return socketChannelInfos.add(info);
     }
 
     @Override
@@ -47,13 +55,13 @@ public class SimpleNIOEchoServerIOHandler implements Runnable {
             return;
         }
 
+        System.out.println(this.getClass().getName() + " I/O thread start");
+
         while (true) {
+            registerNewChannel();
+
             try {
-                int selectorResult = selector.select(1000);
-                if (selectorResult <= 0) {
-                    if (selectorResult < 0) {
-                        System.out.println(this.TAG + " selectorResult = " + selectorResult);
-                    }
+                if (selector.select(10) <= 0) {
                     continue;
                 }
             } catch (Exception e) {
@@ -77,6 +85,8 @@ public class SimpleNIOEchoServerIOHandler implements Runnable {
                                 System.out.println(this.TAG + " Client #" + attachment.getId() + " disconnected");
                                 attachment.getSocketChannel().close();
                                 continue;
+                            } else if (readNum > 0) {
+                                attachment.getSocketChannel().register(selector, SelectionKey.OP_WRITE, attachment);
                             } else {
                                 System.out.println(this.TAG + " Client #" + attachment.getId() + " read " + readNum + " bytes");
                             }
@@ -116,6 +126,7 @@ public class SimpleNIOEchoServerIOHandler implements Runnable {
                         if (!attachment.getBuffer().hasRemaining()) {
                             attachment.getBuffer().clear();
                             attachment.setMode(SimpleNIO.MODE_READ);
+                            attachment.getSocketChannel().register(selector, SelectionKey.OP_READ, attachment);
                         }
                     } catch (Exception e) {
                         key.cancel();
@@ -126,6 +137,29 @@ public class SimpleNIOEchoServerIOHandler implements Runnable {
                 }
 
                 it.remove();
+            }
+
+            registerNewChannel();
+        }
+    }
+
+    private void registerNewChannel() {
+        if (socketChannelInfos == null || selector == null) {
+            return;
+        }
+
+        while (!socketChannelInfos.isEmpty()) {
+            SocketChannelInfo info = socketChannelInfos.pop();
+
+            if (!info.getSocketChannel().isOpen()) {
+                continue;
+            }
+
+            try {
+                info.getSocketChannel().register(selector, SelectionKey.OP_READ,
+                        new SimpleNIOClientAttachment(info.getClientId(), info.getSocketChannel(), ByteBuffer.allocate(SimpleNIO.BUFFER_SIZE), System.currentTimeMillis(), SimpleNIO.MODE_READ));
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }
     }
