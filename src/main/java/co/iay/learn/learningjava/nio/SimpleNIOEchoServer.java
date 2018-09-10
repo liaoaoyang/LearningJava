@@ -30,15 +30,10 @@ public class SimpleNIOEchoServer {
 
         while (true) {
             try {
-                int selectorResult = selector.select(1000);
-                if (selectorResult <= 0) {
-                    if (selectorResult < 0) {
-                        System.out.println("selectorResult = " + selectorResult);
-                    }
-                    continue;
-                }
+                selector.select();
             } catch (Exception e) {
                 e.printStackTrace();
+                return;
             }
 
             Iterator<SelectionKey> it = selector.selectedKeys().iterator();
@@ -50,8 +45,14 @@ public class SimpleNIOEchoServer {
                     SocketChannel sc;
                     try {
                         sc = serverSocketChannel.accept();
+
+                        if (null == sc) {
+                            it.remove();
+                            continue;
+                        }
+
                         sc.configureBlocking(false);
-                        sc.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE,
+                        sc.register(selector, SelectionKey.OP_READ,
                                 new SimpleNIOClientAttachment(clientId, sc, ByteBuffer.allocate(SimpleNIO.BUFFER_SIZE), System.currentTimeMillis(), SimpleNIO.MODE_READ));
                         ++clientId;
 
@@ -60,6 +61,7 @@ public class SimpleNIOEchoServer {
                         }
                     } catch (Exception e) {
                         e.printStackTrace();
+                        it.remove();
                         continue;
                     }
                 }
@@ -76,6 +78,8 @@ public class SimpleNIOEchoServer {
                                 System.out.println("Client #" + attachment.getId() + " disconnected");
                                 attachment.getSocketChannel().close();
                                 continue;
+                            } else if (readNum > 0) {
+                                attachment.getSocketChannel().register(selector, SelectionKey.OP_WRITE, attachment);
                             } else {
                                 System.out.println("Client #" + attachment.getId() + " read " + readNum + " bytes");
                             }
@@ -115,6 +119,7 @@ public class SimpleNIOEchoServer {
                         if (!attachment.getBuffer().hasRemaining()) {
                             attachment.getBuffer().clear();
                             attachment.setMode(SimpleNIO.MODE_READ);
+                            attachment.getSocketChannel().register(selector, SelectionKey.OP_READ, attachment);
                         }
                     } catch (Exception e) {
                         key.cancel();
