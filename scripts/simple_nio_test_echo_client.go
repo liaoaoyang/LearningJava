@@ -16,7 +16,7 @@ import (
 )
 
 func getRandomString(strLen int) []byte {
-    charTable := []byte("01234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    charTable := []byte("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
     var result []byte
     r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
@@ -27,8 +27,13 @@ func getRandomString(strLen int) []byte {
     return result
 }
 
-func handle(concurrentChan chan int, resultChan chan int, requestId int, host string, port string, strLen *int, repeat int, intervalS int) {
+func handle(concurrentChan chan int, resultChan chan int, requestId int, host string, port string, strLen *int, repeat int, intervalS int, randomIntervalMS int, stepChan chan int) {
     conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))
+
+    if intervalS > 0 {
+        _ = <-stepChan
+    }
+
     if err != nil {
         _ = <-concurrentChan
         resultChan <- -1
@@ -85,7 +90,13 @@ func handle(concurrentChan chan int, resultChan chan int, requestId int, host st
         }
 
         if r < repeat {
-            time.Sleep(time.Duration(intervalS) * time.Second)
+            sleepTime := time.Duration(intervalS) * time.Second
+
+            if randomIntervalMS > 0 {
+                sleepTime = time.Duration(intervalS*1000+randomIntervalMS) * time.Millisecond
+            }
+
+            time.Sleep(sleepTime)
         }
     }
 
@@ -94,8 +105,8 @@ func handle(concurrentChan chan int, resultChan chan int, requestId int, host st
     resultChan <- 0
 }
 
-func doRequest(concurrentChan chan int, resultChan chan int, requestId int, host string, port string, strLen *int, repeat int, intervalS int) {
-    handle(concurrentChan, resultChan, requestId, host, port, strLen, repeat, intervalS)
+func doRequest(concurrentChan chan int, resultChan chan int, requestId int, host string, port string, strLen *int, repeat int, intervalS int, randomIntervalMS int, stepChan chan int) {
+    handle(concurrentChan, resultChan, requestId, host, port, strLen, repeat, intervalS, randomIntervalMS, stepChan)
 }
 
 func main() {
@@ -106,13 +117,15 @@ func main() {
     portsStr := flag.String("P", "", "Ports separated by comma")
     strLen := flag.Int("l", 32, "Random string length")
     concurrent := flag.Int("c", 10, "Concurrent")
+    step := flag.Int("s", 0, "Create new connection after (s) connection accept, only valid when intervalS > 0")
     requestNum := flag.Int("n", 10, "Request number")
     intervalS := flag.Int("i", 0, "Send data after (i) second(s)")
+    randomIntervalMS := flag.Int("R", 0, "Plus (R) ms when sleep")
     repeat := flag.Int("r", 1, "Repeatedly sending data for (r) times")
     flag.Parse()
     ports := strings.Split(*portsStr, ",")
 
-    fmt.Printf("host=%s port=%s strLen=%d concurrent=%d requestNum=%d portsStr=%s intervalS=%d repeat=%d\n", *host, *port, *strLen, *concurrent, *requestNum, *portsStr, *intervalS, *repeat)
+    fmt.Printf("host=%s port=%s strLen=%d concurrent=%d requestNum=%d portsStr=%s intervalS=%d repeat=%d step=%d randomIntervalMS=%d\n", *host, *port, *strLen, *concurrent, *requestNum, *portsStr, *intervalS, *repeat, *step, *randomIntervalMS)
 
     handled := 0
     handleSuccess := 0
@@ -126,6 +139,13 @@ func main() {
 
     concurrentChan := make(chan int, *concurrent)
     resultChan := make(chan int, *requestNum)
+    stepChanSize := *step
+
+    if stepChanSize <= 0 {
+        stepChanSize = *concurrent
+    }
+
+    stepChan := make(chan int, stepChanSize)
     alreadySent := 0
 
     sigs := make(chan os.Signal, 1)
@@ -161,8 +181,12 @@ func main() {
                 portsIndex = (portsIndex + 1) % len(ports)
             }
 
+            if *intervalS > 0 {
+                stepChan <- i
+            }
+
             concurrentChan <- i
-            go doRequest(concurrentChan, resultChan, i, *host, tempPort, strLen, *repeat, *intervalS)
+            go doRequest(concurrentChan, resultChan, i, *host, tempPort, strLen, *repeat, *intervalS, *randomIntervalMS, stepChan)
             alreadySent++
         }
     }()
