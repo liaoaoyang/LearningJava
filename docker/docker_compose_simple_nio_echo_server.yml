@@ -1,0 +1,22 @@
+version: '3'
+networks:
+  simple_nio_echo_client:
+services:
+  echo_client:
+    image: golang:1.11.0-alpine3.8
+    networks:
+      - simple_nio_echo_server
+    volumes:
+      - ./:/usr/src/myapp
+    sysctls:
+      net.ipv4.ip_local_port_range: "2048 60999"
+    entrypoint:
+      - "go"
+      - "run"
+      - "/usr/src/myapp/simple_nio_test_echo_client.go"
+      - "-h=192.168.16.1"
+      - "-c=30000"
+      - "-P=12345"
+      - "-n=100000"
+      - "-l=100"
+
