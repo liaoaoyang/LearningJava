@@ -1,18 +1,18 @@
 package main
 
 import (
-    "flag"
-    "math/rand"
-    "time"
-    "net"
-    "fmt"
     "bufio"
-    "runtime"
     "bytes"
-    "strings"
+    "flag"
+    "fmt"
+    "math/rand"
+    "net"
     "os"
-    "syscall"
     "os/signal"
+    "runtime"
+    "strings"
+    "syscall"
+    "time"
 )
 
 func getRandomString(strLen int) []byte {
@@ -57,7 +57,7 @@ func handle(concurrentChan chan int, resultChan chan int, requestId int, host st
 
         nowReadLen := 0
         var data2receive []byte
-        for ; nowReadLen < *strLen; {
+        for nowReadLen < *strLen {
             nowRead, err := resp.ReadByte()
 
             if err != nil {
@@ -152,7 +152,7 @@ func main() {
     signal.Notify(sigs, syscall.SIGINT)
 
     go func() {
-        for ; needExit <= 1; {
+        for needExit <= 1 {
             sig := <-sigs
 
             if sig == syscall.SIGINT {
@@ -191,7 +191,7 @@ func main() {
         }
     }()
 
-    for ; handled < *requestNum; {
+    for handled < *requestNum {
         if needExit > 0 && handled >= alreadySent {
             break
         }

@@ -1,12 +1,12 @@
 package main
 
 import (
+    "fmt"
     "io"
-    "net/http"
     "log"
+    "net/http"
     "os"
     "strings"
-    "fmt"
 )
 
 // hello world, the web server
