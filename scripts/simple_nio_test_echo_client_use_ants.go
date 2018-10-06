@@ -9,21 +9,8 @@ import (
     "bufio"
     "bytes"
     "time"
-    "math/rand"
     "runtime"
 )
-
-func getRandomString(strLen int) []byte {
-    charTable := []byte("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-    var result []byte
-    r := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-    for i := 0; i < strLen; i++ {
-        result = append(result, charTable[r.Intn(len(charTable))])
-    }
-
-    return result
-}
 
 func req(resultChan chan int, requestId int, host string, port string, strLen *int, repeat int, intervalS int, randomIntervalMS int) {
     conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))

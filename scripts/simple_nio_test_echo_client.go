@@ -5,7 +5,6 @@ import (
     "bytes"
     "flag"
     "fmt"
-    "math/rand"
     "net"
     "os"
     "os/signal"
@@ -14,18 +13,6 @@ import (
     "syscall"
     "time"
 )
-
-func getRandomString(strLen int) []byte {
-    charTable := []byte("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-    var result []byte
-    r := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-    for i := 0; i < strLen; i++ {
-        result = append(result, charTable[r.Intn(len(charTable))])
-    }
-
-    return result
-}
 
 func handle(concurrentChan chan int, resultChan chan int, requestId int, host string, port string, strLen *int, repeat int, intervalS int, randomIntervalMS int, stepChan chan int) {
     conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))
