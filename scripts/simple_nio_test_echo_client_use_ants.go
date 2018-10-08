@@ -1,15 +1,15 @@
 package main
 
 import (
-    "fmt"
-    "github.com/panjf2000/ants"
-    "flag"
-    "strings"
-    "net"
     "bufio"
     "bytes"
-    "time"
+    "flag"
+    "fmt"
+    "github.com/panjf2000/ants"
+    "net"
     "runtime"
+    "strings"
+    "time"
 )
 
 func req(resultChan chan int, requestId int, host string, port string, strLen *int, repeat int, intervalS int, randomIntervalMS int) {
