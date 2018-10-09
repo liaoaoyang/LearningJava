@@ -1,11 +1,11 @@
-package main
+package SimpleNIOTest
 
 import (
     "math/rand"
     "time"
 )
 
-func getRandomString(strLen int) []byte {
+func GetRandomString(strLen int) []byte {
     charTable := []byte("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
     var result []byte
     r := rand.New(rand.NewSource(time.Now().UnixNano()))

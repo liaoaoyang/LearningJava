@@ -10,6 +10,7 @@ import (
     "runtime"
     "strings"
     "time"
+    "./SimpleNIOTest"
 )
 
 func req(resultChan chan int, requestId int, host string, port string, strLen *int, repeat int, intervalS int, randomIntervalMS int) {
@@ -24,7 +25,7 @@ func req(resultChan chan int, requestId int, host string, port string, strLen *i
     resp := bufio.NewReader(conn)
 
     for r := 0; r < repeat; r++ {
-        data2send := getRandomString(*strLen)
+        data2send := SimpleNIOTest.GetRandomString(*strLen)
         wrote, err := conn.Write(data2send)
 
         if err != nil {
