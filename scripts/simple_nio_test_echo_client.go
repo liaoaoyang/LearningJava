@@ -1,6 +1,7 @@
 package main
 
 import (
+    "./SimpleNIOTest"
     "bufio"
     "bytes"
     "flag"
@@ -12,7 +13,6 @@ import (
     "strings"
     "syscall"
     "time"
-    "./SimpleNIOTest"
 )
 
 func handle(concurrentChan chan int, resultChan chan int, requestId int, host string, port string, strLen *int, repeat int, intervalS int, randomIntervalMS int, stepChan chan int) {

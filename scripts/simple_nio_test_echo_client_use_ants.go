@@ -1,6 +1,7 @@
 package main
 
 import (
+    "./SimpleNIOTest"
     "bufio"
     "bytes"
     "flag"
@@ -10,10 +11,9 @@ import (
     "runtime"
     "strings"
     "time"
-    "./SimpleNIOTest"
 )
 
-func req(resultChan chan int, requestId int, host string, port string, strLen *int, repeat int, intervalS int, randomIntervalMS int) {
+func doPoolRequest(resultChan chan int, requestId int, host string, port string, strLen *int, repeat int, intervalS int, randomIntervalMS int) {
     conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))
 
     if err != nil {
@@ -121,7 +121,7 @@ func main() {
         }
 
         pool.Submit(func() error {
-            req(resultChan, i, *host, tempPort, strLen, *repeat, *intervalS, *randomIntervalMS)
+            doPoolRequest(resultChan, i, *host, tempPort, strLen, *repeat, *intervalS, *randomIntervalMS)
             return nil
         })
     }
