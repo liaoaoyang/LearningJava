@@ -1,0 +1,7 @@
+#!/bin/sh
+
+base_dir=$(cd `dirname $0`; pwd)
+source $base_dir/lib.sh
+checkJar $0 LearningJava-1.0-SNAPSHOT
+jar_file=`getJarFilename $0 LearningJava-1.0-SNAPSHOT`
+java $* -cp $jar_file co.iay.learn.learningjava.nio.SimpleNIOEchoServerMT
