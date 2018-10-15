@@ -1,6 +1,6 @@
 #!/bin/sh
 
-checkJar()
+check_jar()
 {
     base_dir=$(cd `dirname $1`; pwd)
     target_dir=$base_dir/../target
@@ -18,7 +18,7 @@ checkJar()
     fi
 }
 
-getJarFilename()
+get_jar_filename()
 {
     base_dir=$(cd `dirname $1`; pwd)
     echo $base_dir"/../target/"$2".jar"
